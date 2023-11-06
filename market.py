@@ -11,6 +11,16 @@ logger = logging.getLogger(__file__)
 
 
 def get_product_list(page, campaign_id, access_token):
+    """Gets the list of goods from Yandex Marketplace.
+
+    Args:
+        page (str): last page with the goods from the marketplace.
+        campaign_id (str): Delivery method, FBS or DBS.
+        access_token (str): market token for the API.
+
+    Returns:
+        list: list of up to 200 pages from the store, starting from the last page.
+    """
     endpoint_url = "https://api.partner.market.yandex.ru/"
     headers = {
         "Content-Type": "application/json",
@@ -30,6 +40,16 @@ def get_product_list(page, campaign_id, access_token):
 
 
 def update_stocks(stocks, campaign_id, access_token):
+    """Updates goods in stock.
+
+    Args:
+        stocks (list of dict): List of information on goods, their ids and how many in stock there are.
+        campaign_id (str): Delivery method, FBS or DBS.
+        access_token (str): Seller token for the API.
+
+    Returns:
+        dict: Result of the POST response that updates the prices.
+    """
     endpoint_url = "https://api.partner.market.yandex.ru/"
     headers = {
         "Content-Type": "application/json",
@@ -46,6 +66,16 @@ def update_stocks(stocks, campaign_id, access_token):
 
 
 def update_price(prices, campaign_id, access_token):
+    """Update prices of the goods
+
+    Args:
+        prices (list of str): Prices of the goods from the marketplace.
+        campaign_id (str): Delivery method, FBS or DBS.
+        access_token (str): Seller token for the API.
+
+    Returns:
+        dict: Result of the POST response that updates the prices.
+    """
     endpoint_url = "https://api.partner.market.yandex.ru/"
     headers = {
         "Content-Type": "application/json",
@@ -62,7 +92,15 @@ def update_price(prices, campaign_id, access_token):
 
 
 def get_offer_ids(campaign_id, market_token):
-    """Получить артикулы товаров Яндекс маркета"""
+    """Gets ids of the goods from Yandex Market
+
+    Args:
+        campaign_id (str): Delivery method, FBS or DBS.
+        market_token (str): token for the API.
+
+    Returns:
+        list of str: ids of goods from Yandex Market (Called SKU)
+    """
     page = ""
     product_list = []
     while True:
@@ -78,6 +116,17 @@ def get_offer_ids(campaign_id, market_token):
 
 
 def create_stocks(watch_remnants, offer_ids, warehouse_id):
+    """Arranges information about goods in stock based on the remaining items.
+
+    Args:
+        watch_remnants (dict): Information on items in stock.
+        offer_ids (list of str): ids of necessary items.
+        warehouse_id (str): id of a warehouse, either for FBS or DBS delivery method.
+
+    Returns:
+        list of dict: information on each necessary item's remains in stock - if more than 10, assume 100, otherwise
+        how many are left; for all necessary items that were not found in the remaining, assume 0.
+    """
     # Уберем то, что не загружено в market
     stocks = list()
     date = str(datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z")
@@ -123,6 +172,15 @@ def create_stocks(watch_remnants, offer_ids, warehouse_id):
 
 
 def create_prices(watch_remnants, offer_ids):
+    """Returns properly formatted prices for items
+
+    Args:
+        watch_remnants (dict): Information on items in stock.
+        offer_ids (list of str): ids of necessary items.
+
+    Returns:
+        list of dict: Formatted information on the items.
+    """
     prices = []
     for watch in watch_remnants:
         if str(watch.get("Код")) in offer_ids:
@@ -143,6 +201,16 @@ def create_prices(watch_remnants, offer_ids):
 
 
 async def upload_prices(watch_remnants, campaign_id, market_token):
+    """Updates prices of goods asynchronously
+
+    Args:
+        watch_remnants (dict): Information on items in stock.
+        campaign_id (str): Delivery method, FBS or DBS.
+        market_token (str): token for the API.
+
+    Returns:
+        list: list of updated prices.
+    """
     offer_ids = get_offer_ids(campaign_id, market_token)
     prices = create_prices(watch_remnants, offer_ids)
     for some_prices in list(divide(prices, 500)):
@@ -151,6 +219,18 @@ async def upload_prices(watch_remnants, campaign_id, market_token):
 
 
 async def upload_stocks(watch_remnants, campaign_id, market_token, warehouse_id):
+    """Updates stocks of goods asynchronously
+
+    Args:
+        watch_remnants (dict): Information on items in stock.
+        campaign_id (str): Delivery method, FBS or DBS.
+        market_token (str): token for the API.
+        warehouse_id (str): id of a warehouse, either for FBS or DBS delivery method.
+
+    Returns:
+        non_empty (list): list of items that are still in stock.
+        stocks (list): updated list of all stocks.
+    """
     offer_ids = get_offer_ids(campaign_id, market_token)
     stocks = create_stocks(watch_remnants, offer_ids, warehouse_id)
     for some_stock in list(divide(stocks, 2000)):
@@ -162,6 +242,13 @@ async def upload_stocks(watch_remnants, campaign_id, market_token, warehouse_id)
 
 
 def main():
+    """Updates stocks and prices of the items, for both FBS and DBS delivery methods.
+
+    Raises:
+        ReadTimeout: in case of time out.
+        ConnectionError: in case connection fails.
+        Exception: in all other cases
+    """
     env = Env()
     market_token = env.str("MARKET_TOKEN")
     campaign_fbs_id = env.str("FBS_ID")
